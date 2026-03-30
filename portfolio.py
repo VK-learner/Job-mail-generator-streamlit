@@ -2,6 +2,7 @@ import pandas as pd
 import chromadb
 import uuid
 
+
 class Portfolio:
     def __init__(self, file_path="my_portfolio.csv"):
         self.file_path = file_path
@@ -12,9 +13,16 @@ class Portfolio:
     def load_portfolio(self):
         if not self.collection.count():
             for _, row in self.data.iterrows():
-                self.collection.add(documents=row["Techstack"],
-                                    metadatas={"links": row["Links"]},
-                                    ids=[str(uuid.uuid4())])
+                self.collection.add(
+                    documents=row["Techstack"],
+                    metadatas={"links": row["Links"]},
+                    ids=[str(uuid.uuid4())],
+                )
 
-    def query_links(self, skills):
-        return self.collection.query(query_texts=skills, n_results=2).get('metadatas', [])
+    def query_links(self, skills, n_results: int = 2):
+        if not skills:
+            return []
+        return self.collection.query(
+            query_texts=skills if isinstance(skills, list) else [skills],
+            n_results=min(n_results, self.collection.count()),
+        ).get("metadatas", [])
