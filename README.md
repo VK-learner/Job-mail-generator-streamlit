@@ -3,6 +3,10 @@
 An AI-powered tool that scrapes job postings from any URL and instantly generates personalized cold emails tailored to your skills and portfolio — built with **Streamlit**, **LangChain**, **Groq (Llama 3.3 70B)**, and **ChromaDB**.
 
 ---
+<p align="center">
+  <img src="demo-screenshot.png" width="700" alt="Cold Email Generator demo"/>
+</p>
+---
 
 ## ✨ Features
 
