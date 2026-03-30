@@ -6,6 +6,7 @@ An AI-powered tool that scrapes job postings from any URL and instantly generate
 <p align="center">
   <img src="demo-screenshot.png" width="700" alt="Cold Email Generator demo"/>
 </p>
+
 ---
 
 ## ✨ Features
