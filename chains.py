@@ -10,10 +10,15 @@ load_dotenv()
 
 class Chain:
     def __init__(self):
+        api_key = os.getenv("GROQ_API_KEY") or st.secrets.get("GROQ_API_KEY")
+
+        if not api_key:
+            raise ValueError("GROQ_API_KEY is not set in environment or Streamlit secrets.")
+
         self.llm = ChatGroq(
             temperature=0,
-            groq_api_key=os.getenv("GROQ_API_KEY"),
-            model_name="llama-3.3-70b-versatile",
+            groq_api_key=api_key,
+            model_name="llama-3.1-70b-versatile",
         )
 
     def extract_jobs(self, cleaned_text):
