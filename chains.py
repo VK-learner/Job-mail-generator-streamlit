@@ -19,7 +19,9 @@ class Chain:
         self.llm = ChatGroq(
             temperature=0,
             groq_api_key=api_key,
-            model_name="llama-3.1-8b-instant",
+            # llama-3.1-8b-instant was deprecated by Groq and shut down on 08/16/2026.
+            # openai/gpt-oss-20b is Groq's recommended 1:1 replacement.
+            model_name="openai/gpt-oss-20b",
         )
 
     def extract_jobs(self, cleaned_text):
@@ -50,12 +52,15 @@ class Chain:
             {job_description}
 
             ### INSTRUCTION:
-            You are Vaibhav, a final-year Electronics and Communication Engineering student at PDA College of Engineering,
-            seeking an internship opportunity.
+            You are Vaibhav Kulkarni, an Electronics & Communication Engineering graduate (PDA College of
+            Engineering, Kalaburagi, 2022-2026) specializing in edge AI and intelligent systems. You bridge
+            hardware and software, deploying optimized AI models to IoT/embedded devices and building
+            LLM-powered applications. You recently completed an IoT & Robotics Engineering internship at Unlox.
+            You are open to internships, freelance projects, and full-time roles in Python/AI development.
 
             In your email, highlight:
-            - Your academic background and technical skills (Python, Java, C, JavaScript, PCB design, microcontrollers,
-              workflow automation, and system-level troubleshooting).
+            - Your background and technical skills (Python, TensorFlow/TFLite, OpenCV, YOLO, LangChain, Streamlit,
+              Raspberry Pi, Embedded C, Java, JavaScript) spanning computer vision, edge AI, IoT, and LLM applications.
             - Your enthusiasm for applying these skills to real-world projects in the company.
             - Your interest in contributing to the company's mission and learning from industry professionals.
             - The most relevant ones from the following links to showcase your portfolio or related work: {link_list}
