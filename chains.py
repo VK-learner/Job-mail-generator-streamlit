@@ -1,5 +1,6 @@
 import os
-from langchain_groq import ChatGroq
+import time
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.exceptions import OutputParserException
@@ -8,20 +9,59 @@ import streamlit as st
 
 load_dotenv()
 
+# Gemini's free tier is far more generous than Groq's free-tier gpt-oss-20b
+# (8000 TPM), so chunking is a safety net here rather than a hard requirement -
+# but kept for very large pages. Check current limits at ai.google.dev/pricing,
+# since Google updates model availability and quotas periodically.
+CHARS_PER_TOKEN_ESTIMATE = 4
+MAX_INPUT_TOKENS_PER_CALL = 40000
+MAX_INPUT_CHARS_PER_CALL = MAX_INPUT_TOKENS_PER_CALL * CHARS_PER_TOKEN_ESTIMATE
+
+
+def _chunk_text(text, max_chars=MAX_INPUT_CHARS_PER_CALL):
+    return [text[i:i + max_chars] for i in range(0, len(text), max_chars)] or [text]
+
+
+def _get_text_content(content):
+    """Newer Gemini models (3.x) return content as a list of content blocks
+    (e.g. [{"type": "text", "text": "...", "extras": {...}}]) instead of a
+    plain string. Normalize either shape into plain text."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict) and "text" in block:
+                parts.append(block["text"])
+        return "".join(parts)
+    return str(content)
+
+
+def _clean_json_response(content):
+    """Strip markdown code fences and leading/trailing stray text so
+    JsonOutputParser gets pure JSON even if the model doesn't follow
+    the 'no preamble' instruction exactly."""
+    text = _get_text_content(content).strip()
+    if text.startswith("```"):
+        text = text.split("```")[1]
+        if text.startswith("json"):
+            text = text[4:]
+    return text.strip()
+
 
 class Chain:
     def __init__(self):
-        api_key = os.getenv("GROQ_API_KEY") or st.secrets.get("GROQ_API_KEY")
+        api_key = os.getenv("GOOGLE_API_KEY") or st.secrets.get("GOOGLE_API_KEY")
 
         if not api_key:
-            raise ValueError("GROQ_API_KEY is not set in environment or Streamlit secrets.")
+            raise ValueError("GOOGLE_API_KEY is not set in environment or Streamlit secrets.")
 
-        self.llm = ChatGroq(
+        self.llm = ChatGoogleGenerativeAI(
+            model="gemini-3.6-flash",
             temperature=0,
-            groq_api_key=api_key,
-            # llama-3.1-8b-instant was deprecated by Groq and shut down on 08/16/2026.
-            # openai/gpt-oss-20b is Groq's recommended 1:1 replacement.
-            model_name="openai/gpt-oss-20b",
+            google_api_key=api_key,
         )
 
     def extract_jobs(self, cleaned_text):
@@ -37,13 +77,35 @@ class Chain:
             """
         )
         chain_extract = prompt_extract | self.llm
-        res = chain_extract.invoke(input={"page_data": cleaned_text})
-        try:
-            json_parser = JsonOutputParser()
-            res = json_parser.parse(res.content)
-        except OutputParserException:
+
+        chunks = _chunk_text(cleaned_text)
+        all_jobs = []
+        seen_roles = set()
+
+        for i, chunk in enumerate(chunks):
+            try:
+                res = chain_extract.invoke(input={"page_data": chunk})
+                json_parser = JsonOutputParser()
+                parsed = json_parser.parse(_clean_json_response(res.content))
+            except OutputParserException:
+                # This chunk didn't contain parseable job JSON (e.g. it landed on
+                # nav/footer text) - skip it rather than failing the whole page.
+                continue
+
+            for job in (parsed if isinstance(parsed, list) else [parsed]):
+                role = job.get("role")
+                if role and role not in seen_roles:
+                    seen_roles.add(role)
+                    all_jobs.append(job)
+
+            # Small pause between chunks as a courtesy against the 10 RPM limit;
+            # rarely triggered since chunks are large relative to Gemini's budget.
+            if i < len(chunks) - 1:
+                time.sleep(2)
+
+        if not all_jobs:
             raise OutputParserException("Context too big. Unable to parse jobs.")
-        return res if isinstance(res, list) else [res]
+        return all_jobs
 
     def write_mail(self, job, links):
         prompt_email = PromptTemplate.from_template(
@@ -72,8 +134,8 @@ class Chain:
         )
         chain_email = prompt_email | self.llm
         res = chain_email.invoke({"job_description": str(job), "link_list": links})
-        return res.content
+        return _get_text_content(res.content)
 
 
 if __name__ == "__main__":
-    print(os.getenv("GROQ_API_KEY"))
+    print(os.getenv("GOOGLE_API_KEY"))
