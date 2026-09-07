@@ -81,15 +81,23 @@ class Chain:
         chunks = _chunk_text(cleaned_text)
         all_jobs = []
         seen_roles = set()
+        last_error_detail = None
 
         for i, chunk in enumerate(chunks):
             try:
                 res = chain_extract.invoke(input={"page_data": chunk})
+                raw = _get_text_content(res.content)
                 json_parser = JsonOutputParser()
                 parsed = json_parser.parse(_clean_json_response(res.content))
-            except OutputParserException:
-                # This chunk didn't contain parseable job JSON (e.g. it landed on
-                # nav/footer text) - skip it rather than failing the whole page.
+            except Exception as e:
+                # Keep a snippet of what actually came back so the eventual
+                # error message tells us why, instead of a generic failure.
+                snippet = ""
+                try:
+                    snippet = _get_text_content(res.content)[:200]
+                except Exception:
+                    pass
+                last_error_detail = f"{type(e).__name__}: {e} | response snippet: {snippet!r}"
                 continue
 
             for job in (parsed if isinstance(parsed, list) else [parsed]):
@@ -104,7 +112,9 @@ class Chain:
                 time.sleep(2)
 
         if not all_jobs:
-            raise OutputParserException("Context too big. Unable to parse jobs.")
+            raise OutputParserException(
+                f"Context too big. Unable to parse jobs. Last failure: {last_error_detail}"
+            )
         return all_jobs
 
     def write_mail(self, job, links):
